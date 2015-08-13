@@ -1,2 +1,4 @@
 # watermarkapp
-need updated.
+Package with dependencies:
+
+ mvn clean compile assembly:single
