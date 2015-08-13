@@ -26,6 +26,13 @@
 			<artifactId>log4j</artifactId>
 			<version>${log4j.version}</version>
 		</dependency>
+		<!-- 
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+			<version>18.0</version>
+		</dependency>
+		 -->
 	</dependencies>
 
 	<build>
@@ -58,6 +65,7 @@
 					</configuration>
 					<executions>
 						<execution>
+							<id>make-assembly</id>
 							<phase>package</phase>
 							<goals>
 								<goal>single</goal>

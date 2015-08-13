@@ -2,8 +2,13 @@ package com.wolaidai;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.ObjectInputStream.GetField;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Logger;
@@ -19,36 +24,57 @@ public class WaterMarkApp
 	private static final boolean ENABLE_GRAPHICS_MAGICK = true;
 	private static ConvertCmd s_convertCmd = new ConvertCmd(ENABLE_GRAPHICS_MAGICK);
 	private static CompositeCmd s_compositeCmd = new CompositeCmd(ENABLE_GRAPHICS_MAGICK);
+	private static PictureStyle pictureStyle = new PictureStyle();
+	private static List<String> failedFile = new ArrayList<String>();
 
 	public static void main(String[] args)
 	{
 		long l = System.currentTimeMillis();
+		
 		generate();
-		logger.info("add the watermark for all files success. spend " + (System.currentTimeMillis() - l) + "ms");
+		
+		logger.info("add the watermark and resize files finish,[" + failedFile.size() + "] files failed. spend "
+				+ (System.currentTimeMillis() - l) + "ms");
+		
+		logger.info("wirte the failed file...");
+		try
+		{
+			FileUtils.writeLines(new File(Config.getFailedFilePath()), failedFile);
+		}
+		catch (IOException e)
+		{
+			logger.info("wirte the failed file encounter exception.", e);
+		}
+		
+		logger.info("wirte the failed file finished");
 	}
 
 	private static void generate()
 	{
-		PictureStyle pictureStyle = new PictureStyle();
 		pictureStyle.addStyle("medium", "300x300>");
 		pictureStyle.addStyle("thumb", "100x100>");
 		List<String> resultFileList = readResultFile();
+		logger.info("Read ["+resultFileList.size()+"] files.");
+
+		WaterMarkApp r = new WaterMarkApp();
+		int poolSize = Runtime.getRuntime().availableProcessors();
+		logger.info("the cpus is [" +poolSize+"]============================");
+		ExecutorService exe = Executors.newFixedThreadPool(poolSize);
+		CountDownLatch latch = new CountDownLatch(resultFileList.size());
+
 		for (String resultFile : resultFileList)
 		{
-			boolean result = addWaterMark(resultFile, buildOutputPath(resultFile, "_original_watermark"));
-			if (result)
-			{
-				pictureStyle
-						.getStyles()
-						.stream()
-						.forEach(
-								item -> {
-									resize(buildOutputPath(resultFile, "_original_watermark"),
-											buildOutputPath(resultFile, "_" + item.getKey() + "_watermark"),
-											item.getValue());
-								});
-			}
+			exe.submit(r.new Task(resultFile, latch));
 		}
+		try
+		{
+			latch.await();
+		}
+		catch (InterruptedException e)
+		{
+			logger.error("", e);
+		}
+		exe.shutdown();
 	}
 
 	private static List<String> readResultFile()
@@ -80,6 +106,7 @@ public class WaterMarkApp
 		catch (IOException | InterruptedException | IM4JavaException e)
 		{
 			logger.error("add watermark exception." + srcFilePath, e);
+			failedFile.add(srcFilePath);
 		}
 		logger.info("add watermark:" + destFilePath);
 		return result;
@@ -101,6 +128,7 @@ public class WaterMarkApp
 		catch (IOException | InterruptedException | IM4JavaException e)
 		{
 			logger.error("resize this file exception" + srcFilePath, e);
+			failedFile.add(srcFilePath);
 		}
 
 		return result;
@@ -109,5 +137,38 @@ public class WaterMarkApp
 	private static String buildOutputPath(String srcFile, String replace)
 	{
 		return srcFile.replace("_original", replace);
+	}
+
+	class Task implements Runnable
+	{
+
+		private String resultFile;
+		private CountDownLatch m_latch;
+		public List<Integer> completed = new ArrayList<Integer>();
+
+		public Task(String filePath, CountDownLatch latch)
+		{
+			resultFile = filePath;
+			m_latch = latch;
+		}
+
+		@Override
+		public void run()
+		{
+			boolean result = addWaterMark(resultFile, buildOutputPath(resultFile, "_original_watermark"));
+			if (result)
+			{
+				pictureStyle
+						.getStyles()
+						.stream()
+						.forEach(
+								item -> {
+									resize(buildOutputPath(resultFile, "_original_watermark"),
+											buildOutputPath(resultFile, "_" + item.getKey() + "_watermark"),
+											item.getValue());
+								});
+			}
+			m_latch.countDown();
+		}
 	}
 }

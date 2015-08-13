@@ -26,6 +26,16 @@ public abstract class Config
 		return System.getProperty("user_dir") + File.separator + "result.txt";
 	}
 	
+	public static String getFailedFilePath()
+	{
+		return System.getProperty("user_dir") + File.separator + "failed.txt";
+	}
+	
+	public static String getPoolSize()
+	{
+		return m_prop.getProperty("thread.pool.size");
+	}
+	
 	static
 	{
 		loadConfigFile();
